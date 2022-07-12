@@ -1,0 +1,7 @@
+# compiled code
+*.pyc
+*.py~
+
+
+# Ignore Spyder project nonsense
+.spyproject
