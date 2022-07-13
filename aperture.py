@@ -19,7 +19,7 @@ class ApPhot(object):
 
         x0,y0 = int(self.x), int(self.y)
                  
-        circapers = [CircularAperture((self.x-x0+dx,self.y-y0+dx), aprad ) for aprad in [1,1.5,2,2.5,3,3.5,4]]
+        circapers = [CircularAperture((self.x-x0+dx,self.y-y0+dx), aprad ) for aprad in self.aperture_radii]
 
         self.apertures = circapers
         
