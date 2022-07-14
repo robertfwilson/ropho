@@ -52,7 +52,7 @@ class ApPhot(object):
         #hdr=hdulist[0].header
         time = hdr['TSTART'] 
         
-        result = aperture_photometry(img - bkg_estimate, self.apertures, error=err, method='subpixel')
+        result = aperture_photometry(img - bkg_estimate, self.apertures, error=err, method='subpixel', subpixels=3)
 
         result['bjd'] = time
         
