@@ -84,7 +84,7 @@ class ApPhot(object):
         [all_results.rename_column('aperture_sum_'+str(i), 'apflux_r_'+str(int(ap.r*10))) for i,ap in enumerate(self.apertures)]
         [all_results.rename_column('aperture_sum_err_'+str(i), 'apflux_r_'+str(int(ap.r*10))+'_err') for i,ap in enumerate(self.apertures)]
         
-        return vstack(all_results)
+        return all_results
         
         
     
