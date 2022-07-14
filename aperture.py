@@ -52,8 +52,8 @@ class ApPhot(object):
         #hdr=hdulist[0].header
         time = hdr['TSTART'] 
         
-        result = aperture_photometry(img - bkg_estimate, self.apertures, error=err)
-        
+        result = aperture_photometry(img - bkg_estimate, self.apertures, error=err, method='subpixel')
+
         result['bjd'] = time
         
         #del img
@@ -72,14 +72,8 @@ class ApPhot(object):
     def get_lightcurve(self, dx=5):
         
         self.apertures = self._make_apertures(apradii=self.aperture_radii, dx=dx)
-        
-#        all_results = self._do_photometry(self.fnames[0], dx=dx)
-
-#        for f in self.fnames[1:]:
-#            all_results = vstack([all_results, self._do_photometry(f,dx=dx)])
 
         all_results = vstack([ self._do_photometry(f,dx=dx) for f in self.fnames])
-
         
         [all_results.rename_column('aperture_sum_'+str(i), 'apflux_r_'+str(int(ap.r*10))) for i,ap in enumerate(self.apertures)]
         [all_results.rename_column('aperture_sum_err_'+str(i), 'apflux_r_'+str(int(ap.r*10))+'_err') for i,ap in enumerate(self.apertures)]
