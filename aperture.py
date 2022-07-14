@@ -20,7 +20,6 @@ class ApPhot(object):
         x0,y0 = int(self.x), int(self.y)
                  
         circapers = [CircularAperture((self.x-x0+dx,self.y-y0+dx), aprad ) for aprad in self.aperture_radii]
-
         self.apertures = circapers
         
         return circapers
@@ -34,7 +33,7 @@ class ApPhot(object):
         x_range = x0-dx, x0+dx
         y_range = y0-dx, y0+dx 
         
-        circapers = self._make_apertures(self.aperture_radii, dx)
+        #circapers = self._make_apertures(self.aperture_radii, dx)
 
         
         fits=fitsio.FITS(fname)
@@ -53,7 +52,7 @@ class ApPhot(object):
         #hdr=hdulist[0].header
         time = hdr['TSTART'] 
         
-        result = aperture_photometry(img.T - bkg_estimate, circapers, error=err)
+        result = aperture_photometry(img - bkg_estimate, self.apertures, error=err)
         
         result['bjd'] = time
         
@@ -65,16 +64,25 @@ class ApPhot(object):
         #del hdulist
         
         fits.close()
+        del fits
         
         return result
     
     
-    def get_lightcurve(self):
+    def get_lightcurve(self, dx=5):
         
-        all_results = vstack( [self._do_photometry(f) for f in self.fnames] )
+        self.apertures = self._make_apertures(apradii=self.aperture_radii, dx=dx)
         
-        [all_results.rename_column('aperture_sum_'+str(i), 'apflux_r_'+str(ap.r)) for i,ap in enumerate(self.apertures)]
-        [all_results.rename_column('aperture_sum_err_'+str(i), 'apflux_r_'+str(ap.r)+'_err') for i,ap in enumerate(self.apertures)]
+#        all_results = self._do_photometry(self.fnames[0], dx=dx)
+
+#        for f in self.fnames[1:]:
+#            all_results = vstack([all_results, self._do_photometry(f,dx=dx)])
+
+        all_results = vstack([ self._do_photometry(f,dx=dx) for f in self.fnames])
+
+        
+        [all_results.rename_column('aperture_sum_'+str(i), 'apflux_r_'+str(int(ap.r*10))) for i,ap in enumerate(self.apertures)]
+        [all_results.rename_column('aperture_sum_err_'+str(i), 'apflux_r_'+str(int(ap.r*10))+'_err') for i,ap in enumerate(self.apertures)]
         
         return vstack(all_results)
         
