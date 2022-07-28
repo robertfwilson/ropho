@@ -1,33 +1,58 @@
-from photutils.aperture import CircularAperture, aperture_photometry
-from astropy.table import vstack
-from astropy.io import fits
+from photutils.aperture import CircularAperture
 import fitsio
 import numpy as np
+import pandas as pd
+
 
 
 class ApPhot(object):
-    
-    def __init__(self,fnames,x,y,aperture_radii=[1.,1.5,2.,2.5,3.,3.5,4.]):
+
+    def __init__(self,fnames,x,y,aperture_radii=[1.,1.5,2.,2.5,3.,3.5,4.], cache_fits=True):
         
         self.fnames=sorted(fnames)
         self.x=x
         self.y=y
         self.aperture_radii = aperture_radii
         self.apertures = None
+        
+        if cache_fits:
+            self.fits_cache = [fitsio.FITS(f) for f in self.fnames ]
+            
+    
+    def _get_fits_object(self,f):
+                
+        if isinstance(f, str):
+            return fitsio.FITS(f)
+        else:
+            return self.fits_cache[f]
+        
+        
+    def _get_time(self, fname):
+                
+        fits=self._get_fits_object(fname)    
+        hdr = fits[0].read_header()
+        return hdr['TSTART']
+        
+        
 
-    def _make_apertures(self, apradii, dx):
+    def _make_apertures(self, dx=5, apradii=None, mask=True):
 
+        if apradii is None:
+            apradii = self.aperture_radii
+        
         x0,y0 = int(self.x), int(self.y)
-                 
-        circapers = [CircularAperture((self.x-x0+dx,self.y-y0+dx), aprad ) for aprad in self.aperture_radii]
-        self.apertures = circapers
         
+        if mask:
+            circapers = [CircularAperture((self.x-x0+dx,self.y-y0+dx), aprad ).to_mask(method='exact') for aprad in self.aperture_radii]
+        else:
+            circapers = [CircularAperture((self.x-x0+dx,self.y-y0+dx), aprad ) for aprad in self.aperture_radii]
+        
+        self.apertures = circapers        
         return circapers
-        
 
-        
-    def _do_photometry(self, fname, bkg_estimate=5.23, dx=8):
 
+    def _get_cutout(self, fname, dx=5):
+        
         x0,y0 = int(self.x), int(self.y)
 
         x_range = x0-dx, x0+dx
@@ -35,50 +60,58 @@ class ApPhot(object):
         
         #circapers = self._make_apertures(self.aperture_radii, dx)
 
+        fits = self._get_fits_object(fname)
         
-        fits=fitsio.FITS(fname)
+        img = fits[0][x_range[0]:x_range[1]+1, y_range[0]:y_range[1]+1]
+        err = fits[1][x_range[0]:x_range[1]+1, y_range[0]:y_range[1]+1]
         
-        img = fits[0][x_range[0]:x_range[1], y_range[0]:y_range[1]]
-        err = fits[1][x_range[0]:x_range[1], y_range[0]:y_range[1]]
-        hdr = fits[0].read_header()
-                
-        #(img,err),hdr = fitsio.read(fname, rows=x_range, columns=y_range, header=True)
-                
-        #err = fitsio.read(fname, rows=x_range, columns=y_range,).T
-        
-        #hdulist = fits.open(fname,mmap=False)
-        #img=hdulist[0].data.T
-        #err=hdulist[1].data.T
-        #hdr=hdulist[0].header
-        time = hdr['TSTART'] 
-        
-        result = aperture_photometry(img - bkg_estimate, self.apertures, error=err, method='subpixel', subpixels=3)
+        return img, err
 
-        result['bjd'] = time
+
+    
+    def _add_aperture_fluxes(self, img, err=None):
+            
+        weighted_cutouts = [apmask.multiply(img) for apmask in self.apertures]
+        fluxes = [np.sum(c) for c in weighted_cutouts]
+                
+        if not(err is None):
+            weighted_errs = [apmask.multiply(err**2.) for apmask in self.apertures]
+            flux_errs = [np.sqrt(np.sum(c)) for c in weighted_errs]
+            return np.append(fluxes, flux_errs)
         
-        #del img
-        #del err
-        #del hdr
-        #hdulist.close()
+        return fluxes
+
+
+
+    
+    def _do_phot_faster(self, fname, bkg_estimate=5.23,dx=5):
         
-        #del hdulist
+        img,err = self._get_cutout(fname)
+        fluxes = self._add_aperture_fluxes(img-bkg_estimate, err=err)
         
-        fits.close()
-        del fits
+        return fluxes
         
-        return result
     
     
-    def get_lightcurve(self, dx=5):
+    
+    def get_lightcurve_faster(self, dx=5, use_cached_fits=True):
         
         self.apertures = self._make_apertures(apradii=self.aperture_radii, dx=dx)
-
-        all_results = vstack([ self._do_photometry(f,dx=dx) for f in self.fnames])
         
-        [all_results.rename_column('aperture_sum_'+str(i), 'apflux_r_'+str(int(ap.r*10))) for i,ap in enumerate(self.apertures)]
-        [all_results.rename_column('aperture_sum_err_'+str(i), 'apflux_r_'+str(int(ap.r*10))+'_err') for i,ap in enumerate(self.apertures)]
+        if use_cached_fits:            
+            fnames = np.arange(len(self.fnames),dtype=int)
+        else:
+            fnames = self.fnames
         
-        return all_results
+        all_fluxes = np.array([self._do_phot_faster(f,dx=dx) for f in fnames] )
+        times = [self._get_time(f) for f in fnames]
+        
+        data = np.c_[times, all_fluxes.round(2)]
+        
+        flux_columns = ['sapflux_r'+str(int(r*10)) for r in self.aperture_radii]
+        flux_err_columns = ['sapflux_r'+str(int(r*10))+'_err' for r in self.aperture_radii]
         
         
-    
+        columns = ['bjd']+flux_columns + flux_err_columns
+        
+        return pd.DataFrame(data, columns=columns)
