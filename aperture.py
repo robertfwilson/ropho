@@ -31,7 +31,13 @@ class ApPhot(object):
                 
         fits=self._get_fits_object(fname)    
         hdr = fits[0].read_header()
-        return hdr['TSTART']
+
+        t=hdr['TSTART']
+
+        if isinstance(fname,str):
+            fits.close()
+        
+        return t
         
         
 
@@ -112,6 +118,6 @@ class ApPhot(object):
         flux_err_columns = ['sapflux_r'+str(int(r*10))+'_err' for r in self.aperture_radii]
         
         
-        columns = ['bjd']+flux_columns + flux_err_columns
+        columns = ['jd']+flux_columns + flux_err_columns
         
         return pd.DataFrame(data, columns=columns)
