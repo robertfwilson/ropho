@@ -17,6 +17,8 @@ class ApPhot(object):
         
         if cache_fits:
             self.fits_cache = [fitsio.FITS(f) for f in self.fnames ]
+        else:
+            self.fits_cache=None
             
     
     def _get_fits_object(self,f):
@@ -64,8 +66,6 @@ class ApPhot(object):
         x_range = x0-dx, x0+dx
         y_range = y0-dx, y0+dx 
         
-        #circapers = self._make_apertures(self.aperture_radii, dx)
-
         fits = self._get_fits_object(fname)
         
         img = fits[0][x_range[0]:x_range[1]+1, y_range[0]:y_range[1]+1]
@@ -83,7 +83,7 @@ class ApPhot(object):
         if not(err is None):
             weighted_errs = [apmask.multiply(err**2.) for apmask in self.apertures]
             flux_errs = [np.sqrt(np.sum(c)) for c in weighted_errs]
-            return np.append(fluxes, flux_errs)
+            return fluxes + flux_errs
         
         return fluxes
 
@@ -100,11 +100,11 @@ class ApPhot(object):
     
     
     
-    def get_lightcurve_faster(self, dx=5, use_cached_fits=True):
+    def get_lightcurve_faster(self, dx=5, use_cached_fits=True, return_numpy=False):
         
         self.apertures = self._make_apertures(apradii=self.aperture_radii, dx=dx)
         
-        if use_cached_fits:            
+        if use_cached_fits and not(self.fits_cache is None):            
             fnames = np.arange(len(self.fnames),dtype=int)
         else:
             fnames = self.fnames
@@ -113,11 +113,13 @@ class ApPhot(object):
         times = [self._get_time(f) for f in fnames]
         
         data = np.c_[times, all_fluxes.round(2)]
+
+        if return_numpy:
+            return data
+            
         
-        flux_columns = ['sapflux_r'+str(int(r*10)) for r in self.aperture_radii]
-        flux_err_columns = ['sapflux_r'+str(int(r*10))+'_err' for r in self.aperture_radii]
-        
-        
-        columns = ['jd']+flux_columns + flux_err_columns
+        flux_columns=['sapflux_r'+str(int(r*10)) for r in self.aperture_radii]
+        flux_err_columns=['sapflux_r'+str(int(r*10))+'_err' for r in self.aperture_radii]
+        columns = ['jd'] + flux_columns + flux_err_columns
         
         return pd.DataFrame(data, columns=columns)
